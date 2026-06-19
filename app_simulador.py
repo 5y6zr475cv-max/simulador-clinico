@@ -1,4 +1,5 @@
 import streamlit as st
+import urllib.parse
 
 # 1. CONFIGURACIÓN DE LA INTERFAZ ORIGINAL (DISEÑO ESTILIZADO)
 st.set_page_config(page_title="Simulador Clínico Híbrido 2.0", layout="wide")
@@ -39,7 +40,7 @@ st.markdown("---")
 st.header("🎙️ Interfaz del Alumno: Simulación de Voz Live")
 st.write("Presiona 'Iniciar Paciente Virtual' para activar el micrófono e iniciar el interrogatorio clínico.")
 
-# Lectura segura de la API KEY desde los Secrets del servidor de Streamlit Cloud
+# Lectura segura de la API KEY desde los Secrets
 api_key_env = st.secrets["GEMINI_API_KEY"]
 
 col_audio_1, col_audio_2 = st.columns([1, 2])
@@ -52,15 +53,20 @@ with col_audio_2:
 if conectar_voz:
     status_placeholder.success("🟢 Modo Híbrido Activo - Conectando canales de audio...")
     
-    # Inyección segura con f-string escapando correctamente las llaves de JavaScript
-    st.components.v1.html(f"""
+    # Bloque de código HTML/JS que se meterá en el nuevo st.iframe
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+    </head>
+    <body style="margin:0; padding:0;">
         <div id="status-box" style="background-color: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; text-align: center; font-family: sans-serif;">
             <p id="status-text" style="color: #0f172a; margin: 0 0 5px 0;">⏳ <strong>Conectando con el Paciente Virtual...</strong></p>
             <p style="font-size: 13px; color: #64748b; margin: 0;">Acepta los permisos de micrófono si el navegador lo solicita.</p>
         </div>
         
         <script>
-            // La clave se inyecta dinámicamente desde el servidor sin quedar expuesta en el código base de GitHub
             const API_KEY = "{api_key_env}";
             const PROMPT = "Actúa como Carlos Gómez, paciente con crisis asmática severa. Responde con disnea, angustia y frases extremadamente cortas de máximo 4 palabras.";
             
@@ -156,4 +162,12 @@ if conectar_voz:
                 }}
             }}
         </script>
-    """, height=110)
+    </body>
+    </html>
+    """
+    
+    # Codificamos el HTML para pasarlo de manera segura al st.iframe moderno
+    compiled_data_url = f"data:text/html;charset=utf-8,{urllib.parse.quote(html_content)}"
+    
+    # 3. NUEVO COMPONENTE OFICIAL DE STREAMLIT (Sustituye st.components.v1.html)
+    st.iframe(src=compiled_data_url, height=120)
