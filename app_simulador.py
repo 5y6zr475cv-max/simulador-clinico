@@ -149,4 +149,4 @@ if conectar_voz:
                 }
             };
         </script>
-    """, height=100)
+    """, height=110, allow="microphone")
