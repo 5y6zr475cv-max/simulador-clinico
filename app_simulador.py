@@ -25,7 +25,7 @@ fr = col_sv2.number_input("FR (rpm):", value=28)
 ta = col_sv3.text_input("Presión Arterial (mmHg):", value="140/90")
 sat = col_sv4.number_input("Saturación Oxígeno (%):", value=88)
 
-# Instrucciones del sistema clínicas
+# Instrucciones clínicas base
 instruccion_sistema = (
     f"Actúa estrictamente como un paciente llamado {nombre} de {edad} años, género {genero}. "
     f"Tienes un nivel de ansiedad {ansiedad} y una dificultad respiratoria del {disnea}%. "
@@ -39,6 +39,7 @@ st.markdown("---")
 st.header("🎙️ Interfaz del Alumno: Simulación de Voz Live")
 st.write("Presiona 'Iniciar Paciente Virtual' para activar el micrófono e iniciar el interrogatorio clínico.")
 
+# Lectura segura de la API KEY desde los Secrets del servidor de Streamlit Cloud
 api_key_env = st.secrets["GEMINI_API_KEY"]
 
 col_audio_1, col_audio_2 = st.columns([1, 2])
@@ -51,102 +52,108 @@ with col_audio_2:
 if conectar_voz:
     status_placeholder.success("🟢 Modo Híbrido Activo - Conectando canales de audio...")
     
-    # Pasamos la instrucción usando un div invisible para evitar romper las llaves de JavaScript con Python
-    st.markdown(f'<div id="prompt-clinico" style="display:none;">{instruccion_sistema}</div>', unsafe_allow_html=True)
-    st.markdown(f'<div id="api-key-hidden" style="display:none;">{api_key_env}</div>', unsafe_allow_html=True)
-    
-    # Inyección de código limpio. No usa f-strings de Python, eliminando errores de llaves simples/dobles.
-    st.components.v1.html("""
-        <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; text-align: center; font-family: sans-serif;">
-            <p style="color: #0f172a; margin: 0 0 5px 0;">🎙️ <strong>Canal de Voz Conectado Exitosamente</strong></p>
-            <p style="font-size: 13px; color: #64748b; margin: 0;">El simulador está escuchando e interactuando de forma bidireccional.</p>
+    # Inyección segura con f-string escapando correctamente las llaves de JavaScript
+    st.components.v1.html(f"""
+        <div id="status-box" style="background-color: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; text-align: center; font-family: sans-serif;">
+            <p id="status-text" style="color: #0f172a; margin: 0 0 5px 0;">⏳ <strong>Conectando con el Paciente Virtual...</strong></p>
+            <p style="font-size: 13px; color: #64748b; margin: 0;">Acepta los permisos de micrófono si el navegador lo solicita.</p>
         </div>
         
         <script>
-            const API_KEY = document.parentWindow ? null : window.parent.document.getElementById('api-key-hidden').innerText;
-            const PROMPT = document.parentWindow ? null : window.parent.document.getElementById('prompt-clinico').innerText;
+            // La clave se inyecta dinámicamente desde el servidor sin quedar expuesta en el código base de GitHub
+            const API_KEY = "{api_key_env}";
+            const PROMPT = "Actúa como Carlos Gómez, paciente con crisis asmática severa. Responde con disnea, angustia y frases extremadamente cortas de máximo 4 palabras.";
             
             const HOST = "generativelanguage.googleapis.com";
             const PATH = "/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=" + API_KEY;
             
-            const ws = new WebSocket("wss://" + HOST + PATH);
+            let ws;
             let audioCtx;
             
-            function abrirSalidaAudio() {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
-            }
+            try {{
+                ws = new WebSocket("wss://" + HOST + PATH);
+                
+                ws.onopen = () => {{
+                    document.getElementById("status-text").innerHTML = "🟢 <strong>Paciente en línea: ¡Puedes hablar ahora!</strong>";
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)({{ sampleRate: 24000 }});
+                    
+                    const setup = {{
+                        setup: {{
+                            model: "models/gemini-2.0-flash-exp",
+                            generationConfig: {{
+                                responseModalities: ["AUDIO"],
+                                speechConfig: {{
+                                    voiceConfig: {{ prebuiltVoiceConfig: {{ voiceName: "Puck" }} }}
+                                }}
+                            }},
+                            systemInstruction: {{
+                                parts: [{{ text: PROMPT }}]
+                            }}
+                        }}
+                    }};
+                    ws.send(JSON.stringify(setup));
+                    activarMicrofono();
+                }};
 
-            ws.onopen = () => {
-                abrirSalidaAudio();
-                const setup = {
-                    setup: {
-                        model: "models/gemini-2.0-flash-exp",
-                        generationConfig: {
-                            responseModalities: ["AUDIO"],
-                            speechConfig: {
-                                voiceConfig: { prebuiltVoiceConfig: { voiceName: "Puck" } }
-                            }
-                        },
-                        systemInstruction: {
-                            parts: [{ text: PROMPT }]
-                        }
-                    }
-                };
-                ws.send(JSON.stringify(setup));
-                activarMicrofono();
-            };
+                ws.onmessage = async (event) => {{
+                    const msg = JSON.parse(event.data);
+                    if (msg.serverContent && msg.serverContent.modelTurn) {{
+                        const parts = msg.serverContent.modelTurn.parts;
+                        for (const part of parts) {{
+                            if (part.inlineData && part.inlineData.mimeType.startsWith("audio/pcm")) {{
+                                const raw = atob(part.inlineData.data);
+                                const array = new Uint8Array(raw.length);
+                                for(let i=0; i<raw.length; i++) {{ array[i] = raw.charCodeAt(i); }}
+                                const pcm16 = new Int16Array(array.buffer);
+                                
+                                const float32 = new Float32Array(pcm16.length);
+                                for(let i=0; i<pcm16.length; i++) {{ float32[i] = pcm16[i] / 0x7FFF; }}
+                                
+                                const audioBuffer = audioCtx.createBuffer(1, float32.length, 24000);
+                                audioBuffer.getChannelData(0).set(float32);
+                                const bufferSource = audioCtx.createBufferSource();
+                                bufferSource.buffer = audioBuffer;
+                                bufferSource.connect(audioCtx.destination);
+                                bufferSource.start();
+                            }}
+                        }}
+                    }}
+                }};
 
-            async function activarMicrofono() {
-                try {
-                    const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, sampleRate: 16000 } });
-                    const micCtx = new AudioContext({ sampleRate: 16000 });
+                ws.onerror = (e) => {{
+                    document.getElementById("status-text").innerHTML = "❌ <strong>Error de conexión con la API de Google</strong>";
+                }};
+
+            }} catch(err) {{
+                document.getElementById("status-text").innerHTML = "❌ <strong>Error de inicialización</strong>";
+            }}
+
+            async function activarMicrofono() {{
+                try {{
+                    const stream = await navigator.mediaDevices.getUserMedia({{ audio: {{ channelCount: 1, sampleRate: 16000 }} }});
+                    const micCtx = new AudioContext({{ sampleRate: 16000 }});
                     const source = micCtx.createMediaStreamSource(stream);
                     const processor = micCtx.createScriptProcessor(2048, 1, 1);
 
-                    processor.onaudioprocess = (e) => {
+                    processor.onaudioprocess = (e) => {{
                         const input = e.inputBuffer.getChannelData(0);
                         const pcm = new Int16Array(input.length);
-                        for (let i = 0; i < input.length; i++) {
+                        for (let i = 0; i < input.length; i++) {{
                             pcm[i] = Math.max(-1, Math.min(1, input[i])) * 0x7FFF;
-                        }
+                        }}
                         const base64Audio = btoa(String.fromCharCode(...new Uint8Array(pcm.buffer)));
                         
-                        if (ws.readyState === WebSocket.OPEN) {
-                            ws.send(JSON.stringify({
-                                realtimeInput: { mediaChunks: [{ mimeType: "audio/pcm", data: base64Audio }] }
-                            }));
-                        }
-                    };
+                        if (ws && ws.readyState === WebSocket.OPEN) {{
+                            ws.send(JSON.stringify({{
+                                realtimeInput: {{ mediaChunks: [{{ mimeType: "audio/pcm", data: base64Audio }}] }}
+                            }}));
+                        }}
+                    }};
                     source.connect(processor);
                     processor.connect(micCtx.destination);
-                } catch (err) {
-                    console.error("Error al acceder al micrófono:", err);
-                }
-            }
-
-            ws.onmessage = async (event) => {
-                const msg = JSON.parse(event.data);
-                if (msg.serverContent && msg.serverContent.modelTurn) {
-                    const parts = msg.serverContent.modelTurn.parts;
-                    for (const part of parts) {
-                        if (part.inlineData && part.inlineData.mimeType.startsWith("audio/pcm")) {
-                            const raw = atob(part.inlineData.data);
-                            const array = new Uint8Array(raw.length);
-                            for(let i=0; i<raw.length; i++) { array[i] = raw.charCodeAt(i); }
-                            const pcm16 = new Int16Array(array.buffer);
-                            
-                            const float32 = new Float32Array(pcm16.length);
-                            for(let i=0; i<pcm16.length; i++) { float32[i] = pcm16[i] / 0x7FFF; }
-                            
-                            const audioBuffer = audioCtx.createBuffer(1, float32.length, 24000);
-                            audioBuffer.getChannelData(0).set(float32);
-                            const bufferSource = audioCtx.createBufferSource();
-                            bufferSource.buffer = audioBuffer;
-                            bufferSource.connect(audioCtx.destination);
-                            bufferSource.start();
-                        }
-                    }
-                }
-            };
+                }} catch (err) {{
+                    document.getElementById("status-text").innerHTML = "❌ <strong>Permiso de micrófono denegado</strong>";
+                }}
+            }}
         </script>
-    """, height=110, allow="microphone")
+    """, height=110)
