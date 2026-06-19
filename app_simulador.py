@@ -1,5 +1,6 @@
 import streamlit as st
 import json
+import os  # <-- CORRECCIÓN: Añadido para resolver el NameError de raíz
 
 # Configuración de página de Streamlit
 st.set_page_config(
@@ -167,8 +168,6 @@ with col2:
 st.markdown("---")
 
 # PROCESAMIENTO: Generación automática de las "System Instructions" de Gemini
-# Esta sección traduce los controles gráficos del docente al lenguaje estructurado que requiere la IA.
-
 instruccion_sistema = f"""[ROL Y CONTEXTO]
 Actúa rigurosamente como un paciente de simulación clínica.
 - Nombre: {nombre}
@@ -179,7 +178,7 @@ Actúa rigurosamente como un paciente de simulación clínica.
 [ESTADO FÍSICO Y EMOCIONAL]
 - Nivel de Ansiedad: {ansiedad}. Si es Crítico, tu tono de voz debe denotar pánico, miedo a morir o desesperación.
 - Dificultad Respiratoria (Disnea): {disnea}%. 
-  * REGLA DE VOZ: Si este valor es mayor a 50%, debes simular fatiga de manera muy marcada. Habla con oraciones sumamente cortas (máximo 4 palabras por emisión). Haz pausas frecuentes utilizando puntos suspensivos ("..."). Jadea o simula sibilancias de esfuerzo verbalizadas.
+  * REGLA DE VOZ: Si este valor es mayor a 50%, debes simular fatiga de manera muy marcada. Habla con frases de máximo 4 palabras. Haz pausas frecuentes usando puntos suspensivos ("...").
 - Si el alumno te hace preguntas irrelevantes o largas, reacciona cansado, diciendo que no tienes aire para responder tanto.
 
 [SIGNOS VITALES INICIALES]
@@ -199,7 +198,7 @@ if kw2:
     instruccion_sistema += f"- Si detectas la acción o mención de '{kw2}': Modifica tu estado a: {reac2}. Tu ansiedad pasa a ser 'Baja' y respiras de forma fluida.\n"
 
 # VISUALIZACIÓN DEL PROMPT FINAL PARA EL DOCENTE
-st.header("⚙️ Prompt Generado (System Instructions)")
+st.header("⚙️ Prompt Generated (System Instructions)")
 st.write("Este es el texto técnico estructurado que la plataforma enviará en segundo plano a la API de Gemini:")
 
 with st.expander("👁️ Ver instrucciones del sistema completas"):
@@ -213,19 +212,15 @@ col_sites_1, col_sites_2 = st.columns(2)
 with col_sites_1:
     st.write("""
     ### ¿Cómo usar este simulador en tu Blog de Sites?
-    1. **Sube este script a la nube:** Puedes alojarlo gratis en **Streamlit Community Cloud** (streamlit.io) vinculando tu repositorio de GitHub.
-    2. **Copia el enlace público:** Una vez desplegado, obtendrás un enlace tipo `https://tu-simulador.streamlit.app`.
-    3. **Insértalo en Google Sites:**
-       * Abre tu blog en Google Sites.
-       * Haz clic en **Insertar** > **Incorporar** (Embed).
-       * Pega la URL de tu aplicación Streamlit.
+    1. **Sube este script a la nube:** Alójalo gratis en **Streamlit Community Cloud** vinculando tu repositorio de GitHub.
+    2. **Copia el enlace público:** Obtendrás una URL tipo `https://tu-simulador.streamlit.app`.
+    3. **Insértalo en Google Sites:** Usa el botón de **Incorporar (Embed)** mediante URL.
     """)
 with col_sites_2:
     st.info("""
     💡 **Ventaja de Streamlit:**
-    Al estar embebido en Google Sites mediante un iframe, los alumnos podrán acceder a la interfaz directamente desde la web escolar. Si añades la conexión de micrófono y la Live API, el alumno podrá hablar directamente con el maniquí virtual usando la laptop en el laboratorio.
+    Al estar embebido en Google Sites mediante un iframe, los alumnos podrán acceder a la interfaz directamente desde la web escolar y hablar con el maniquí virtual usando la laptop en el laboratorio.
     """)
-
 
 # 2. INTERFAZ DEL ALUMNO (ORIGINAL)
 st.markdown("---")
@@ -245,7 +240,7 @@ with col_audio_2:
 if conectar_voz:
     status_placeholder.success("🟢 Modo Híbrido Activo - Conectando canales de audio...")
     
-    # Estructura del cliente de audio independiente
+    # Estructura del cliente de audio independiente (Escapando las llaves del JS para Python)
     html_raw = f"""<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"></head>
@@ -256,7 +251,7 @@ if conectar_voz:
     </div>
     <script>
         const API_KEY = "{api_key_env}";
-        const PROMPT = "Actúa como Carlos Gómez, paciente con crisis asmática severa. Responde con disnea, angustia y frases extremadamente cortas de máximo 4 palabras.";
+        const PROMPT = "{instruccion_sistema.replace(chr(10), ' ').replace('"', '\\"')}";
         const HOST = "generativelanguage.googleapis.com";
         const PATH = "/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=" + API_KEY;
         let ws; let audioCtx;
@@ -321,7 +316,7 @@ if conectar_voz:
 </body>
 </html>"""
 
-    # Guardamos el cliente de audio en la carpeta estática del servidor de Streamlit
+    # Guardamos el cliente de audio en el directorio estático
     static_path = "static"
     if not os.path.exists(static_path):
         os.makedirs(static_path)
@@ -329,5 +324,5 @@ if conectar_voz:
     with open(os.path.join(static_path, "audio_client.html"), "w", encoding="utf-8") as f:
         f.write(html_raw)
 
-    # El iframe ahora apunta a un archivo real del dominio seguro, permitiendo heredar los permisos de hardware
-    st.write('<iframe src="static/audio_client.html" height="120" width="100%" allow="microphone" style="border:none;"></iframe>', unsafe_allow_html=True)
+    # Inyección final limpia usando el HTML nativo con permisos explícitos heredados
+    st.write('<iframe src="static/audio_client.html" height="130" width="100%" allow="microphone" style="border:none;"></iframe>', unsafe_allow_html=True)
