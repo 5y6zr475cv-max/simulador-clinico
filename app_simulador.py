@@ -1,39 +1,231 @@
 import streamlit as st
-import os
+import json
 
-# 1. CONFIGURACIÓN DE LA INTERFAZ ORIGINAL (DISEÑO ESTILIZADO)
-st.set_page_config(page_title="Simulador Clínico Híbrido 2.0", layout="wide")
-
-st.title("🤖 Simulador Clínico Híbrido 2.0")
-st.subheader("Panel de Control Docente e Interfaz del Alumno")
-
-# Formulario original para el docente
-with st.expander("🛠️ Configuración del Caso Clínico (Docente)", expanded=True):
-    col1, col2 = st.columns(2)
-    with col1:
-        nombre = st.text_input("Nombre del Paciente Virtual:", value="Carlos Gómez")
-        edad = st.number_input("Edad:", value=28)
-        genero = st.selectbox("Género:", ["Masculino", "Femenino", "Otro"])
-    with col2:
-        ansiedad = st.select_slider("Nivel de Ansiedad:", options=["Bajo", "Moderado", "Crítico"], value="Crítico")
-        disnea = st.slider("Dificultad Respiratoria (%):", 0, 100, 85)
-
-# Signos vitales originales
-st.markdown("### 📊 Signos Vitales Iniciales")
-col_sv1, col_sv2, col_sv3, col_sv4 = st.columns(4)
-fc = col_sv1.number_input("FC (lpm):", value=115)
-fr = col_sv2.number_input("FR (rpm):", value=28)
-ta = col_sv3.text_input("Presión Arterial (mmHg):", value="140/90")
-sat = col_sv4.number_input("Saturación Oxígeno (%):", value=88)
-
-# Instrucciones clínicas base
-instruccion_sistema = (
-    f"Actúa estrictamente como un paciente llamado {nombre} de {edad} años, género {genero}. "
-    f"Tienes un nivel de ansiedad {ansiedad} y una dificultad respiratoria del {disnea}%. "
-    f"Tus signos vitales iniciales son: FC {fc} lpm, FR {fr} rpm, TA {ta}, Saturación {sat}%. "
-    "Habla con frases muy cortas (máximo 4 palabras), simula que te falta el aire y estás asustado. "
-    "No uses lenguaje médico. Si te ponen oxígeno o te dan salbutamol, empieza a mejorar tu respiración gradualmente."
+# Configuración de página de Streamlit
+st.set_page_config(
+    page_title="Simulador Clínico Híbrido 2.0 - Panel Docente",
+    page_icon="🩺",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
+
+# Estilos personalizados para un look clínico, limpio y profesional (Teal & Navy)
+st.markdown("""
+    <style>
+    .main {
+        background-color: #f8fafc;
+    }
+    .stApp header {
+        background-color: #003366;
+    }
+    h1, h2, h3 {
+        color: #003366;
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    }
+    .clinical-card {
+        background-color: #ffffff;
+        padding: 20px;
+        border-radius: 10px;
+        border-left: 5px solid #008080;
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+    .status-badge {
+        background-color: #e2e8f0;
+        padding: 5px 10px;
+        border-radius: 15px;
+        font-weight: bold;
+        color: #003366;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# TÍTULO DE LA APLICACIÓN
+st.title("🩺 Simulador Clínico Híbrido 2.0")
+st.subheader("Panel de Configuración de Casos Clínicos para Docentes")
+st.markdown("---")
+
+# BARRA LATERAL: Selección de Plantillas Predefinidas
+with st.sidebar:
+    st.header("📋 Plantillas Rápidas")
+    st.write("Selecciona un caso predefinido para cargar los parámetros iniciales:")
+    
+    plantilla = st.selectbox(
+        "Escenarios Disponibles",
+        ["Vacío (Personalizado)", "Crisis Asmática Severa", "Infarto Agudo (SCASEST)", "Crisis de Ansiedad / Pánico"]
+    )
+    
+    st.markdown("---")
+    st.write("🔌 **Estado del Maniquí:**")
+    st.markdown("<span class='status-badge'>🟢 Modo Híbrido Activo (Audio Vía Web)</span>", unsafe_allow_html=True)
+
+# Inicializar variables de sesión para las plantillas
+if plantilla == "Crisis Asmática Severa":
+    default_nombre = "Carlos Gómez"
+    default_edad = 28
+    default_genero = "Masculino"
+    default_motivo = "Dificultad respiratoria extrema que comenzó hace 1 hora después de barrer un almacén con polvo."
+    default_ansiedad = "Crítico"
+    default_disnea = 85
+    default_fc = 118
+    default_fr = 28
+    default_ta_sis = 135
+    default_ta_dia = 85
+    default_sato2 = 88
+    default_keyword_1 = "oxigeno"
+    default_reaccion_1 = "Siente alivio en el pecho, pero sigue agitado. Su SatO2 sube a 94%."
+    default_keyword_2 = "salbutamol"
+    default_reaccion_2 = "La respiración mejora notablemente, disminuyen las sibilancias orales y puede hablar más corrido."
+elif plantilla == "Infarto Agudo (SCASEST)":
+    default_nombre = "Elena Rodríguez"
+    default_edad = 62
+    default_genero = "Femenino"
+    default_motivo = "Dolor opresivo retroesternal de intensidad 8/10, irradiado a mandíbula y brazo izquierdo, acompañado de diaforesis."
+    default_ansiedad = "Crítico"
+    default_disnea = 30
+    default_fc = 95
+    default_fr = 18
+    default_ta_sis = 150
+    default_ta_dia = 95
+    default_sato2 = 95
+    default_keyword_1 = "aspirina"
+    default_reaccion_1 = "Menciona que el dolor disminuye levemente a 6/10, pero sigue asustada."
+    default_keyword_2 = "nitroglicerina"
+    default_reaccion_2 = "El dolor disminuye significativamente a 3/10 y la presión arterial baja a niveles normales."
+else:
+    default_nombre = "Paciente Anónimo"
+    default_edad = 30
+    default_genero = "Masculino"
+    default_motivo = ""
+    default_ansiedad = "Moderado"
+    default_disnea = 0
+    default_fc = 80
+    default_fr = 16
+    default_ta_sis = 120
+    default_ta_dia = 80
+    default_sato2 = 98
+    default_keyword_1 = ""
+    default_reaccion_1 = ""
+    default_keyword_2 = ""
+    default_reaccion_2 = ""
+
+# DISEÑO DE LA INTERFAZ EN DOS COLUMNAS DE CONFIGURACIÓN
+col1, col2 = st.columns([1, 1], gap="large")
+
+with col1:
+    st.markdown("<div class='clinical-card'><h3>👤 1. Datos del Paciente</h3></div>", unsafe_allow_html=True)
+    nombre = st.text_input("Nombre Completo (Ficticio)", value=default_nombre)
+    
+    col_demog = st.columns(2)
+    with col_demog[0]:
+        edad = st.number_input("Edad (Años)", min_value=0, max_value=120, value=default_edad)
+    with col_demog[1]:
+        genero = st.selectbox("Género Fisiológico", ["Masculino", "Femenino", "Otro"], index=["Masculino", "Femenino", "Otro"].index(default_genero))
+        
+    motivo_consulta = st.text_area("Motivo de Consulta (Contexto Clínico)", value=default_motivo, placeholder="Ej: Dolor abdominal difuso que inició hace 4 horas...")
+
+    st.markdown("<div class='clinical-card'><h3>🎭 2. Estado Emocional y Respiratorio</h3></div>", unsafe_allow_html=True)
+    ansiedad = st.select_slider(
+        "Nivel de Ansiedad / Miedo",
+        options=["Bajo", "Moderado", "Crítico"],
+        value=default_ansiedad
+    )
+    disnea = st.slider("Dificultad para Respirar (Disnea %)", 0, 100, default_disnea, help="A mayor porcentaje, el modelo hablará con oraciones más cortas e interrumpidas.")
+
+with col2:
+    st.markdown("<div class='clinical-card'><h3>📊 3. Signos Vitales Iniciales</h3></div>", unsafe_allow_html=True)
+    
+    col_vitals_1 = st.columns(2)
+    with col_vitals_1[0]:
+        fc = st.number_input("Frecuencia Cardíaca (lpm)", 30, 220, default_fc)
+    with col_vitals_1[1]:
+        fr = st.number_input("Frecuencia Respiratoria (rpm)", 8, 50, default_fr)
+        
+    col_vitals_2 = st.columns(3)
+    with col_vitals_2[0]:
+        ta_sis = st.number_input("TA Sistólica (mmHg)", 50, 250, default_ta_sis)
+    with col_vitals_2[1]:
+        ta_dia = st.number_input("TA Diastólica (mmHg)", 30, 150, default_ta_dia)
+    with col_vitals_2[2]:
+        sato2 = st.number_input("Saturación O2 (%)", 50, 100, default_sato2)
+
+    st.markdown("<div class='clinical-card'><h3>🎯 4. Reglas de Intervención (Palabras Clave)</h3></div>", unsafe_allow_html=True)
+    st.write("Define qué acciones del alumno aliviarán o alterarán el estado del paciente:")
+    
+    col_rule_1 = st.columns([1, 2])
+    with col_rule_1[0]:
+        kw1 = st.text_input("Acción / Palabra Clave 1", value=default_keyword_1, placeholder="ej. oxigeno")
+    with col_rule_1[1]:
+        reac1 = st.text_input("Reacción del Paciente 1", value=default_reaccion_1, placeholder="ej. Siente alivio parcial...")
+        
+    col_rule_2 = st.columns([1, 2])
+    with col_rule_2[0]:
+        kw2 = st.text_input("Acción / Palabra Clave 2", value=default_keyword_2, placeholder="ej. salbutamol")
+    with col_rule_2[1]:
+        reac2 = st.text_input("Reacción del Paciente 2", value=default_reaccion_2, placeholder="ej. Su respiración mejora...")
+
+st.markdown("---")
+
+# PROCESAMIENTO: Generación automática de las "System Instructions" de Gemini
+# Esta sección traduce los controles gráficos del docente al lenguaje estructurado que requiere la IA.
+
+instruccion_sistema = f"""[ROL Y CONTEXTO]
+Actúa rigurosamente como un paciente de simulación clínica.
+- Nombre: {nombre}
+- Edad: {edad} años
+- Género: {genero}
+- Motivo de consulta principal: {motivo_consulta}
+
+[ESTADO FÍSICO Y EMOCIONAL]
+- Nivel de Ansiedad: {ansiedad}. Si es Crítico, tu tono de voz debe denotar pánico, miedo a morir o desesperación.
+- Dificultad Respiratoria (Disnea): {disnea}%. 
+  * REGLA DE VOZ: Si este valor es mayor a 50%, debes simular fatiga de manera muy marcada. Habla con oraciones sumamente cortas (máximo 4 palabras por emisión). Haz pausas frecuentes utilizando puntos suspensivos ("..."). Jadea o simula sibilancias de esfuerzo verbalizadas.
+- Si el alumno te hace preguntas irrelevantes o largas, reacciona cansado, diciendo que no tienes aire para responder tanto.
+
+[SIGNOS VITALES INICIALES]
+Si el alumno dice explícitamente que te va a colocar o conectar a un monitor de signos vitales, describe verbalmente estos valores exactos:
+- Frecuencia Cardíaca: {fc} lpm
+- Frecuencia Respiratoria: {fr} rpm
+- Presión Arterial: {ta_sis}/{ta_dia} mmHg
+- Saturación de Oxígeno: {sato2}%
+
+[DINÁMICA DE TRATAMIENTO (MEJORÍA)]
+Debes reaccionar con cambios lógicos en tu voz y actitud solo ante los siguientes desencadenantes verbales del alumno:
+"""
+
+if kw1:
+    instruccion_sistema += f"- Si detectas la acción o mención de '{kw1}': Modifica tu estado a: {reac1}. Tu dificultad respiratoria percibida disminuye a la mitad.\n"
+if kw2:
+    instruccion_sistema += f"- Si detectas la acción o mención de '{kw2}': Modifica tu estado a: {reac2}. Tu ansiedad pasa a ser 'Baja' y respiras de forma fluida.\n"
+
+# VISUALIZACIÓN DEL PROMPT FINAL PARA EL DOCENTE
+st.header("⚙️ Prompt Generado (System Instructions)")
+st.write("Este es el texto técnico estructurado que la plataforma enviará en segundo plano a la API de Gemini:")
+
+with st.expander("👁️ Ver instrucciones del sistema completas"):
+    st.code(instruccion_sistema, language="markdown")
+
+# SECCIÓN DE INTEGRACIÓN CON EL BLOG (EMBED DE GOOGLE SITES)
+st.markdown("---")
+st.header("🌐 Despliegue en Google Sites")
+
+col_sites_1, col_sites_2 = st.columns(2)
+with col_sites_1:
+    st.write("""
+    ### ¿Cómo usar este simulador en tu Blog de Sites?
+    1. **Sube este script a la nube:** Puedes alojarlo gratis en **Streamlit Community Cloud** (streamlit.io) vinculando tu repositorio de GitHub.
+    2. **Copia el enlace público:** Una vez desplegado, obtendrás un enlace tipo `https://tu-simulador.streamlit.app`.
+    3. **Insértalo en Google Sites:**
+       * Abre tu blog en Google Sites.
+       * Haz clic en **Insertar** > **Incorporar** (Embed).
+       * Pega la URL de tu aplicación Streamlit.
+    """)
+with col_sites_2:
+    st.info("""
+    💡 **Ventaja de Streamlit:**
+    Al estar embebido en Google Sites mediante un iframe, los alumnos podrán acceder a la interfaz directamente desde la web escolar. Si añades la conexión de micrófono y la Live API, el alumno podrá hablar directamente con el maniquí virtual usando la laptop en el laboratorio.
+    """)
+
 
 # 2. INTERFAZ DEL ALUMNO (ORIGINAL)
 st.markdown("---")
