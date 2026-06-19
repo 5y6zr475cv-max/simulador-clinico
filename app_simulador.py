@@ -53,7 +53,7 @@ with col_audio_2:
 if conectar_voz:
     status_placeholder.success("🟢 Modo Híbrido Activo - Conectando canales de audio...")
     
-    # Bloque de código HTML/JS que se meterá en el nuevo st.iframe
+    # Bloque de código HTML/JS que se meterá en el iframe nativo
     html_content = f"""
     <!DOCTYPE html>
     <html>
@@ -166,8 +166,8 @@ if conectar_voz:
     </html>
     """
     
-    # Codificamos el HTML para pasarlo de manera segura al st.iframe moderno
+    # Codificación de la URL del frame
     compiled_data_url = f"data:text/html;charset=utf-8,{urllib.parse.quote(html_content)}"
     
-    # 3. NUEVO COMPONENTE OFICIAL DE STREAMLIT (Sustituye st.components.v1.html)
-  st.write(f'<iframe src="{compiled_data_url}" height="120" width="100%" allow="microphone" style="border:none;"></iframe>', unsafe_allow_html=True)
+    # 3. MIGRACIÓN COMPLETA A IFRAME CON PERMISOS EXPLICITOS DE HARDWARE
+    st.write(f'<iframe src="{compiled_data_url}" height="120" width="100%" allow="microphone" style="border:none;"></iframe>', unsafe_allow_html=True)
