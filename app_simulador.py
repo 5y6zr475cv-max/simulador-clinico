@@ -170,4 +170,4 @@ if conectar_voz:
     compiled_data_url = f"data:text/html;charset=utf-8,{urllib.parse.quote(html_content)}"
     
     # 3. NUEVO COMPONENTE OFICIAL DE STREAMLIT (Sustituye st.components.v1.html)
-    st.iframe(src=compiled_data_url, height=120)
+  st.write(f'<iframe src="{compiled_data_url}" height="120" width="100%" allow="microphone" style="border:none;"></iframe>', unsafe_allow_html=True)
